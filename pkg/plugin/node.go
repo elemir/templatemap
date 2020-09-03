@@ -8,6 +8,7 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/elemir/templatemap/pkg/template"
@@ -23,10 +24,20 @@ type NodeServer struct {
 	csi.UnimplementedNodeServer
 }
 
-func NewNodeServer(log *logrus.Entry, nodeId string) (*NodeServer, error) {
-	config, err := rest.InClusterConfig()
-	if err != nil {
-		return nil, err
+func NewNodeServer(log *logrus.Entry, kubeconfig string, nodeId string) (*NodeServer, error) {
+	var config *rest.Config
+	var err error
+
+	if kubeconfig == "" {
+		config, err = rest.InClusterConfig()
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		config, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	clientset, err := kubernetes.NewForConfig(config)
