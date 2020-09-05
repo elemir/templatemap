@@ -14,7 +14,7 @@ func runPlugin(log *logrus.Logger) cli.ActionFunc {
 	return func(c *cli.Context) error {
 		plugin, err := plugin.NewPlugin(c.String("nodeid"), c.String("endpoint"), log)
 		if err != nil {
-			return fmt.Errorf("cannot create plugin")
+			return fmt.Errorf("cannot create plugin: %w", err)
 		}
 		return plugin.Run()
 	}
@@ -35,6 +35,7 @@ func main() {
 			},
 			&cli.StringFlag{
 				Name:    "endpoint",
+				Value:   "unix:///csi/csi.sock",
 				Aliases: []string{"e"},
 				Usage:   "CSI endpoint",
 			},

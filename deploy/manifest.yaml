@@ -32,7 +32,7 @@ spec:
             exec:
               command: ["/bin/sh", "-c", "rm -rf /registration/csi-templatemap-reg.sock"]
         args:
-          - "--csi-address=/csi/csi.sock"
+          - "--csi-address=unix:///csi/csi.sock"
           - "--kubelet-registration-path=/var/lib/kubelet/plugins/csi-templatemap/csi.sock"
           - "--v=5"
         volumeMounts:

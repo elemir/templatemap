@@ -11,6 +11,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/elemir/templatemap/pkg/k8su"
 	"github.com/elemir/templatemap/pkg/template"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc/codes"
@@ -21,6 +22,7 @@ type NodeServer struct {
 	nodeId    string
 	log       *logrus.Entry
 	clientset *kubernetes.Clientset
+	config    *rest.Config
 	csi.UnimplementedNodeServer
 }
 
@@ -49,6 +51,7 @@ func NewNodeServer(log *logrus.Entry, kubeconfig string, nodeId string) (*NodeSe
 		nodeId:    nodeId,
 		log:       log,
 		clientset: clientset,
+		config:    config,
 	}, nil
 }
 
@@ -73,22 +76,30 @@ func (ns *NodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 		return nil, status.Error(codes.InvalidArgument, "Target path missing in request")
 	}
 
-	configMapName := req.GetVolumeContext()["name"]
+	configMapName := req.GetVolumeContext()["configMapName"]
 	namespace := req.GetVolumeContext()["csi.storage.k8s.io/pod.namespace"]
 	podName := req.GetVolumeContext()["csi.storage.k8s.io/pod.name"]
+	serviceAccountName := req.GetVolumeContext()["serviceAccountName"]
+
+	if serviceAccountName == "" {
+		serviceAccountName = req.GetVolumeContext()["csi.storage.k8s.io/serviceAccount.name"]
+	}
 
 	targetPath := req.GetTargetPath()
 
-	// TODO: use specific SA from pod
-	tmpl, err := template.NewTemplate(ns.clientset, namespace, podName)
+	clientset, err := k8su.RunAs(ns.clientset, ns.config, namespace, serviceAccountName)
 	if err != nil {
-		return nil, status.Error(codes.Internal, fmt.Sprintf("Cannot create templater from config"))
+		return nil, status.Error(codes.Internal, fmt.Sprintf("Cannot run as specific SA: %s", err))
 	}
 
-	// TODO: use specific SA from pod
-	cm, err := ns.clientset.CoreV1().ConfigMaps(namespace).Get(configMapName, v1.GetOptions{})
+	tmpl, err := template.NewTemplate(clientset, namespace, podName)
 	if err != nil {
-		return nil, status.Error(codes.NotFound, fmt.Sprintf("Cannot found specific ConfigMap '%s'", configMapName))
+		return nil, status.Error(codes.Internal, fmt.Sprintf("Cannot create templater from config: %s", err))
+	}
+
+	cm, err := clientset.CoreV1().ConfigMaps(namespace).Get(configMapName, v1.GetOptions{})
+	if err != nil {
+		return nil, status.Error(codes.NotFound, fmt.Sprintf("Cannot found specific ConfigMap '%s': %s", configMapName, err))
 	}
 
 	err = os.Mkdir(targetPath, 0750)
